@@ -5,11 +5,13 @@ import Image from "next/image";
 
 const navLinks = [
   { label: "Inicio",    href: "#inicio" },
-  { label: "Nosotros",  href: "#nosotros" },
+  { label: "Impacto",   href: "#impacto" },
   { label: "Temas",     href: "#temas" },
   { label: "Encuestas", href: "#encuestas" },
   { label: "Informes",  href: "#informes" },
   { label: "Videos",    href: "#videos" },
+  { label: "Nosotros",  href: "#nosotros" },
+  { label: "Contacto",  href: "#contacto" },
 ];
 
 function smoothScrollTo(href: string) {
@@ -36,8 +38,8 @@ export default function Navbar() {
 
   return (
     <header
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 bg-white border-b border-gray-100 ${
-        scrolled ? "navbar-scrolled" : ""
+      className={`fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-100 transition-shadow duration-300 ${
+        scrolled ? "shadow-sm" : ""
       }`}
     >
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">

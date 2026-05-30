@@ -1,30 +1,51 @@
 # Impacto Colectivo — Website Reference
 
 ## Stack
-- Next.js 15 (App Router) · TypeScript · TailwindCSS v4 · npm · Vercel
+- Next.js 16 (App Router) · TypeScript · TailwindCSS v4 · npm · Vercel
 - `react-icons` installed (use `react-icons/md` for Material Design icons)
+- `@supabase/supabase-js` installed — Supabase for DB + Storage
 - No other UI libraries — all components hand-built
 
 ## Project Structure
 ```
 app/
-  globals.css       — brand tokens, all CSS animation keyframes
-  layout.tsx        — lang="es", Geist Sans font, metadata
-  page.tsx          — assembles Navbar + all sections
+  globals.css          — brand tokens, all CSS animation keyframes
+  layout.tsx           — lang="es", Geist Sans font, metadata
+  page.tsx             — assembles Navbar + all sections
+  api/
+    survey/
+      route.ts         — GET (count by surveyId), POST (submit response)
+      list/route.ts    — GET active surveys from DB (public)
+    informes/route.ts  — GET all informes (public)
+    videos/route.ts    — GET all videos (public, uses getAdminSupabase to bypass RLS)
+    admin/
+      auth/route.ts    — POST login, DELETE logout (sets httpOnly cookie)
+      surveys/route.ts — GET/POST/PATCH/DELETE surveys (admin)
+      responses/route.ts — GET all responses grouped (admin)
+      informes/route.ts  — POST upload PDF, DELETE informe (admin)
+      videos/route.ts    — GET/POST (YouTube URL or file upload)/DELETE videos (admin)
+  admindashboard/
+    page.tsx           — main admin dashboard (protected)
+    login/page.tsx     — password login page
+    surveys/[id]/page.tsx — survey detail + charts + hide/delete
 
 components/
   Navbar.tsx
   sections/
-    Inicio.tsx      ✅
-    Nosotros.tsx    ✅
-    Temas.tsx       ✅
-    Encuestas.tsx   🔲
-    Informes.tsx    🔲
-    Videos.tsx      🔲
-    Contacto.tsx    🔲
+    Inicio.tsx         ✅
+    Impacto.tsx        ✅  (id="impacto", nav label "Impacto" — about the org, SVG network visual)
+    Temas.tsx          ✅
+    Encuestas.tsx      ✅ (dynamic, fetches from DB)
+    Informes.tsx       ✅ (dynamic, fetches from DB)
+    Videos.tsx         ✅ (dynamic, fetches from DB, YouTube + file upload)
+    QuienesSomos.tsx   ✅ (id="nosotros", nav label "Nosotros" — pills + stats)
+    Contacto.tsx       🔲
 
 lib/
-  hooks.ts          — shared useInView hook (export only)
+  hooks.ts        — shared useInView hook
+  supabase.ts     — exports `supabase` (anon) and `getAdminSupabase()` (service role)
+
+middleware.ts     — protects /admindashboard/* (checks admin_session cookie)
 
 public/
   logos/
@@ -33,75 +54,84 @@ public/
     IC_Logo Hor.png — horizontal variant
 ```
 
+## page.tsx section order
+```tsx
+<Navbar />
+<Inicio />       {/* #inicio */}
+<Impacto />      {/* #impacto — imported from sections/Impacto.tsx */}
+<Temas />        {/* #temas */}
+<Encuestas />    {/* #encuestas */}
+<Informes />     {/* #informes */}
+<Videos />       {/* #videos */}
+<QuienesSomos /> {/* #nosotros — imported from sections/QuienesSomos.tsx */}
+{/* Contacto next */}
+```
+
+## Navbar links (components/Navbar.tsx)
+Order: Inicio · Impacto · Temas · Encuestas · Informes · Videos · Nosotros
+- "Participar" button → scrolls to `#encuestas`
+- Fixed top, `z-50`, white bg with bottom border
+- Mobile: hamburger toggles animated dropdown
+- On scroll: `.navbar-scrolled` → frosted glass effect
+- All links smooth scroll via `scrollIntoView({ behavior: "smooth" })`
+
+## Env Vars (`.env.local` + Vercel)
+```
+NEXT_PUBLIC_SUPABASE_URL=https://xojdrgzbvwsxrpcictcr.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...   (legacy JWT anon key — NOT the new sb_publishable_ format)
+SUPABASE_SERVICE_ROLE_KEY=eyJ...       (service role secret, server-side only)
+ADMIN_PASSWORD=...                      (password for /admindashboard)
+```
+
+## Supabase DB Tables
+- **surveys** — id (uuid), question, options (text[]), active (bool), created_at
+  - RLS: public SELECT where active=true; admin uses service role
+- **survey_responses** — id, survey_id (uuid FK), selected_option, created_at
+  - RLS: public INSERT + SELECT
+- **informes** — id, title, category, published_date, pages (int), file_size, file_url, file_path, created_at
+  - RLS: public SELECT
+- **videos** — id, title, category, published_date, duration, video_url, file_path (nullable), created_at
+  - RLS: enabled, policy allows anon SELECT. Public API uses service role to bypass.
+  - `video_url`: either a YouTube URL or a Supabase Storage public URL
+  - `file_path`: null for YouTube videos, set for uploaded files
+- **Storage bucket `informes`** (public) — stores PDF files
+- **Storage bucket `videos`** (public) — stores uploaded video files
+
+## Admin Dashboard (`/admindashboard`)
+- Protected by middleware checking `admin_session` cookie === `ADMIN_PASSWORD`
+- Login page at `/admindashboard/login`
+- Section order: Encuestas overview → response charts → survey management table → add survey form → Informes publicados → Publicar informe → Videos publicados → Agregar video
+- Survey rows clickable → `/admindashboard/surveys/[id]` (detail + charts + toggle + delete)
+- Survey toggle (eye icon): sets `active` true/false, preserves responses
+- Informe upload: FormData with PDF → Supabase Storage `informes` bucket → DB insert
+- Video add: toggle between "URL de YouTube" and "Subir archivo" modes
+  - YouTube: POST JSON `{ title, category, published_date, duration, video_url }`
+  - File: POST FormData → Supabase Storage `videos` bucket → DB insert
+- Video delete: also removes from storage if `file_path` is set
+
 ## Brand Tokens
 - **Teal:** `#2EBFC0` — primary color, CTAs, accents, icons
 - **Dark navy:** `#1E2D3D` — headings, dark text
 - **Gray:** `#6B7280` — body text, labels
 - **White:** `#ffffff` — card backgrounds, default bg
-- **Light gray bg:** `bg-gray-50` — used for alternating sections (Temas)
-
-## Navbar (`components/Navbar.tsx`)
-- Fixed top, `z-50`, white bg with bottom border
-- Logo left · Nav links center · "Participar" outlined button right · hamburger far right
-- Nav links: Inicio · Temas · Encuestas · Informes · Videos · Nosotros · Contacto
-- All links are anchor links: `href="#inicio"`, `href="#temas"`, etc.
-- Mobile: hamburger (≡) toggles animated dropdown with all links
-- On scroll: `.navbar-scrolled` class added via JS → frosted glass effect (`rgba(255,255,255,0.85)` + `backdrop-filter: blur(12px)`)
+- **Light gray bg:** `bg-gray-50` — alternating sections
 
 ## Animation System
 
 ### Core Rule
-**All animations are triggered by IntersectionObserver** — elements start invisible and only animate when scrolled into view. This ensures animations replay correctly on Cmd+R and work for off-screen sections.
+All animations triggered by IntersectionObserver — elements start invisible, animate on scroll into view.
 
 ### Shared Hook (`lib/hooks.ts`)
 ```ts
 useInView<T extends Element>(threshold = 0.2)
-// Returns [ref, inView] — fires once when element enters viewport, then disconnects
-```
-Import in every section: `import { useInView } from "@/lib/hooks"`
-
-### CSS Animation Classes (`app/globals.css`)
-Used for text/element reveals — apply conditionally: `className={inView ? "animate-reveal" : "opacity-0"}`
-
-| Class | Effect |
-|---|---|
-| `animate-reveal` | fadeSlideUp immediately |
-| `animate-reveal-d1` | fadeSlideUp, 0.1s delay |
-| `animate-reveal-d2` | fadeSlideUp, 0.22s delay |
-| `animate-reveal-d3` | fadeSlideUp, 0.36s delay |
-| `animate-reveal-d4` | fadeSlideUp, 0.5s delay |
-| `animate-stat-1/2/3` | statReveal, staggered (0.3/0.45/0.6s) |
-| `.navbar-scrolled` | frosted glass navbar |
-
-### Inline Style Transitions (preferred for SVG/bars)
-CSS keyframes don't reliably restart when class is toggled. Use inline `style` transitions instead:
-
-**SVG line draw:**
-```tsx
-style={{
-  strokeDasharray: 600,
-  strokeDashoffset: inView ? 0 : 600,
-  transition: "stroke-dashoffset 1.4s cubic-bezier(0.25,0.46,0.45,0.94) 0.4s",
-}}
+// Returns [ref, inView] — fires once, then disconnects
 ```
 
-**Progress bars:**
-```tsx
-style={{
-  width: inView ? `${pct}%` : "0%",
-  transition: `width 0.9s cubic-bezier(0.25,0.46,0.45,0.94) ${0.7 + i * 0.15}s`,
-}}
-```
+### CSS Animation Classes (text reveals only)
+`className={inView ? "animate-reveal" : "opacity-0"}`
+- `animate-reveal` / `animate-reveal-d1` through `animate-reveal-d4` — staggered fadeSlideUp
 
-**Opacity fade (cards, SVG fills):**
-```tsx
-style={{
-  opacity: inView ? 1 : 0,
-  transition: `opacity 0.5s ease-out ${i * 0.09}s`,
-}}
-```
-
-**Staggered card entrance (used in Temas):**
+### Inline Style Transitions (cards, pills, stats)
 ```tsx
 style={{
   opacity: inView ? 1 : 0,
@@ -112,47 +142,46 @@ style={{
 
 ## Section Patterns
 
-### Standard two-column section (Inicio, Nosotros)
+### Standard two-column (Inicio, Impacto, QuienesSomos)
 - `max-w-7xl mx-auto px-4 sm:px-6 lg:px-8`
 - `grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center`
-- Left: text content with staggered `animate-reveal-dX`
-- Right: decorative visual (SVG / card panel)
-- Two separate `useInView` refs: one for text, one for visual
+- Two `useInView` refs: text + visual
 
-### Full-width section with card grid (Temas)
-- `bg-gray-50` background
-- Header left-aligned above grid
-- Grid container: `rounded-2xl border border-gray-200 bg-white overflow-hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3`
-- Internal dividers via inline `borderRight` / `borderBottom` on each card based on `col = i % 3` and `row = Math.floor(i / 3)`
+### Card grid with dividers (Temas, Informes)
+- Container: `rounded-2xl border border-gray-200 bg-white overflow-hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3`
+- Dividers via inline style: `borderRight`/`borderBottom` based on col/row position
 
-## Sections Status & Details
+### Dynamic section with loading skeleton (Encuestas, Informes, Videos)
+- Fetch on mount from public API route
+- Show skeleton placeholders while loading
+- Empty state message if no data
 
-| # | ID | Label | File | Status |
+## Sections Status
+
+| # | ID | Nav Label | File | Status |
 |---|---|---|---|---|
 | 1 | `#inicio` | Inicio | `sections/Inicio.tsx` | ✅ |
-| 2 | `#nosotros` | Nosotros | `sections/Nosotros.tsx` | ✅ |
+| 2 | `#impacto` | Impacto | `sections/Impacto.tsx` | ✅ |
 | 3 | `#temas` | Temas | `sections/Temas.tsx` | ✅ |
-| 4 | `#encuestas` | Encuestas | `sections/Encuestas.tsx` | 🔲 |
-| 5 | `#informes` | Informes | `sections/Informes.tsx` | 🔲 |
-| 6 | `#videos` | Videos | `sections/Videos.tsx` | 🔲 |
-| 7 | `#contacto` | Contacto | `sections/Contacto.tsx` | 🔲 |
+| 4 | `#encuestas` | Encuestas | `sections/Encuestas.tsx` | ✅ |
+| 5 | `#informes` | Informes | `sections/Informes.tsx` | ✅ |
+| 6 | `#videos` | Videos | `sections/Videos.tsx` | ✅ |
+| 7 | `#nosotros` | Nosotros | `sections/QuienesSomos.tsx` | ✅ |
+| 8 | `#contacto` | Contacto | `sections/Contacto.tsx` | 🔲 |
 
-### Inicio (Hero)
-- Two-column: left text + right data panel card
-- Right panel: "Panel de Análisis" with 3 stat chips (50 Temas, 10.2k Respuestas, 92% Activos), SVG line chart (ENE–JUL), 4 progress bars (Economía 86%, Salud 72%, Educación 65%, Energía 58%)
-- Bottom stats strip: +50 Temas analizados · +10k Respuestas ciudadanas · Mensual (typewriter)
-- `useCountUp` and `useTypewriter` hooks defined locally in Inicio.tsx (not shared)
+### Videos ✅
+- `bg-white`, 2-column standalone card grid (not connected with dividers)
+- Each card: dark thumbnail (YouTube img or dark grid pattern), teal play button, category badge, duration badge, title, date
+- YouTube → clicking opens YouTube in new tab
+- Self-hosted → clicking opens modal with `<video controls autoPlay>`
+- Loading skeleton shown while fetching
 
-### Nosotros
-- Two-column: left text + right network SVG visualization
-- Right: dot-grid CSS background + SVG with 6 nodes + connecting lines + 2 floating cards ("COBERTURA / 6 áreas" and "PERIODICIDAD / Mensual")
-- Lines animate via `strokeDashoffset` transition; nodes and cards fade in after
-
-### Temas
-- `bg-gray-50`, 3×2 card grid
-- Icons from `react-icons/md`: MdLocalGasStation, MdShoppingBasket, MdSchool, MdHome, MdMonitorHeart, MdVisibility
-- Cards: icon in teal bg square + title + description
-- Dividers: inline `borderRight`/`borderBottom` per cell index
+### QuienesSomos ✅ (file: `sections/QuienesSomos.tsx`, id: `#nosotros`)
+- `bg-gray-50`, standard 2-column layout
+- Left: teal eyebrow, h2, blockquote with teal left border, paragraph
+- Right: "Lo que nos define" label, pill tags (rounded-full border), 2×2 stats grid
+- Pills: Independientes, Basados en datos, Participación ciudadana, Perspectiva joven, Sin agenda partidaria
+- Stats: 2024/Año de fundación, RD/República Dominicana, 100%/Contenido independiente, Abierto/Acceso libre a informes
 
 ## Dev Commands
 ```bash
@@ -160,3 +189,7 @@ npm run dev      # start dev server → localhost:3000
 npm run build    # production build
 npm run lint     # ESLint
 ```
+
+## Pending
+- Contacto section (#8) — user will provide design mockup
+- Add all env vars to Vercel for production deployment
