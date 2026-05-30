@@ -1,5 +1,51 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { useInView } from "@/lib/hooks";
+
+/* ── Counts from 0 to target once enabled ── */
+function useCountUp(target: number, duration = 1400, delay = 0, enabled = false) {
+  const [value, setValue] = useState(0);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const timer = setTimeout(() => {
+      const start = performance.now();
+      const tick = (now: number) => {
+        const progress = Math.min((now - start) / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        setValue(Math.round(eased * target));
+        if (progress < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [enabled, target, duration, delay]);
+
+  return value;
+}
+
+/* ── Types out text one character at a time once enabled ── */
+function useTypewriter(text: string, delay = 0, speed = 80, enabled = false) {
+  const [displayed, setDisplayed] = useState("");
+
+  useEffect(() => {
+    if (!enabled) return;
+    let i = 0;
+    const timer = setTimeout(() => {
+      const interval = setInterval(() => {
+        setDisplayed(text.slice(0, i + 1));
+        i++;
+        if (i >= text.length) clearInterval(interval);
+      }, speed);
+      return () => clearInterval(interval);
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [enabled, text, delay, speed]);
+
+  return displayed;
+}
+
 const topics = [
   { label: "Economía",  pct: 86 },
   { label: "Salud",     pct: 72 },
@@ -7,42 +53,42 @@ const topics = [
   { label: "Energía",   pct: 58 },
 ];
 
-/* Simple static SVG polyline points for a rising chart */
 const chartPoints = "20,90 80,78 140,64 200,50 260,38 320,26 380,14";
 const areaPath    = "M20,90 80,78 140,64 200,50 260,38 320,26 380,14 L380,100 L20,100 Z";
 
 export default function Inicio() {
+  const [heroRef,  heroInView]  = useInView<HTMLDivElement>(0.15);
+  const [panelRef, panelInView] = useInView<HTMLDivElement>(0.2);
+  const [statsRef, statsInView] = useInView<HTMLDivElement>(0.4);
+
+  const count50  = useCountUp(50, 1400, 0,   statsInView);
+  const count10k = useCountUp(10, 1400, 150, statsInView);
+  const typeword = useTypewriter("Mensual", 300, 75, statsInView);
+
   return (
-    <section
-      id="inicio"
-      className="min-h-screen flex items-center pt-16 bg-white"
-    >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full py-16 lg:py-24">
+    <section id="inicio" className="min-h-screen flex items-center pt-16 bg-white">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full py-8 lg:py-12">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
 
           {/* ── Left: Content ── */}
-          <div className="flex flex-col gap-6">
-            {/* Overline */}
-            <p className="animate-reveal text-xs font-semibold tracking-[0.2em] uppercase text-[#2EBFC0]">
+          <div ref={heroRef} className="flex flex-col gap-6">
+            <p className={`text-xs font-semibold tracking-[0.2em] uppercase text-[#2EBFC0] transition-none ${heroInView ? "animate-reveal" : "opacity-0"}`}>
               Datos · Ciudadanía · Realidad
             </p>
 
-            {/* Heading */}
-            <h1 className="animate-reveal-d1 text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight text-[#1E2D3D]">
+            <h1 className={`text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight text-[#1E2D3D] ${heroInView ? "animate-reveal-d1" : "opacity-0"}`}>
               Los temas que afectan al país, explicados{" "}
               <span className="text-[#2EBFC0]">con claridad.</span>
             </h1>
 
-            {/* Description */}
-            <p className="animate-reveal-d2 text-base sm:text-lg text-[#6B7280] leading-relaxed max-w-lg">
+            <p className={`text-base sm:text-lg text-[#6B7280] leading-relaxed max-w-lg ${heroInView ? "animate-reveal-d2" : "opacity-0"}`}>
               Impacto Colectivo es una plataforma independiente de análisis
               ciudadano. Investigamos lo que más afecta a la República
               Dominicana con datos reales, encuestas directas y perspectiva
               crítica.
             </p>
 
-            {/* CTA Buttons */}
-            <div className="animate-reveal-d3 flex flex-wrap gap-4 pt-2">
+            <div className={`flex flex-wrap gap-4 pt-2 ${heroInView ? "animate-reveal-d3" : "opacity-0"}`}>
               <a
                 href="#encuestas"
                 className="inline-flex items-center px-7 py-3.5 rounded-full bg-[#2EBFC0] text-white
@@ -63,10 +109,9 @@ export default function Inicio() {
           </div>
 
           {/* ── Right: Data Panel ── */}
-          <div className="animate-reveal-d4">
+          <div ref={panelRef} className={panelInView ? "animate-reveal-d2" : "opacity-0"}>
             <div className="bg-gray-50 rounded-2xl p-6 shadow-xl shadow-gray-200/60 border border-gray-100">
 
-              {/* Panel header */}
               <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-[#6B7280] mb-4">
                 Panel de Análisis
               </p>
@@ -74,13 +119,13 @@ export default function Inicio() {
               {/* Stats row */}
               <div className="grid grid-cols-3 gap-3 mb-6">
                 {[
-                  { value: "50",    label: "Temas",      cls: "animate-stat-1" },
-                  { value: "10.2k", label: "Respuestas", cls: "animate-stat-2" },
-                  { value: "92%",   label: "Activos",    cls: "animate-stat-3" },
-                ].map(({ value, label, cls }) => (
+                  { value: "50",    label: "Temas",      delay: "animate-stat-1" },
+                  { value: "10.2k", label: "Respuestas", delay: "animate-stat-2" },
+                  { value: "92%",   label: "Activos",    delay: "animate-stat-3" },
+                ].map(({ value, label, delay }) => (
                   <div
                     key={label}
-                    className={`${cls} bg-white rounded-xl p-3 text-center border border-gray-100 shadow-sm`}
+                    className={`bg-white rounded-xl p-3 text-center border border-gray-100 shadow-sm ${panelInView ? delay : "opacity-0"}`}
                   >
                     <p className="text-xl font-bold text-[#1E2D3D]">{value}</p>
                     <p className="text-[11px] text-[#6B7280] mt-0.5">{label}</p>
@@ -94,23 +139,10 @@ export default function Inicio() {
               </p>
               <div className="bg-white rounded-xl p-4 border border-gray-100 mb-5">
                 <svg viewBox="0 0 400 110" className="w-full h-auto" aria-hidden="true">
-                  {/* Grid lines */}
                   {[25, 50, 75].map((y) => (
-                    <line
-                      key={y}
-                      x1="20" y1={y} x2="380" y2={y}
-                      stroke="#f0f0f0" strokeWidth="1"
-                    />
+                    <line key={y} x1="20" y1={y} x2="380" y2={y} stroke="#f0f0f0" strokeWidth="1" />
                   ))}
 
-                  {/* Area fill */}
-                  <path
-                    d={areaPath}
-                    fill="url(#chartGradient)"
-                    className="animate-chart-fill"
-                  />
-
-                  {/* Gradient definition */}
                   <defs>
                     <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#2EBFC0" stopOpacity="0.18" />
@@ -118,7 +150,15 @@ export default function Inicio() {
                     </linearGradient>
                   </defs>
 
-                  {/* Animated line */}
+                  <path
+                    d={areaPath}
+                    fill="url(#chartGradient)"
+                    style={{
+                      opacity: panelInView ? 1 : 0,
+                      transition: "opacity 0.8s ease-out 1.4s",
+                    }}
+                  />
+
                   <polyline
                     points={chartPoints}
                     fill="none"
@@ -126,10 +166,13 @@ export default function Inicio() {
                     strokeWidth="2.5"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="animate-draw-line"
+                    style={{
+                      strokeDasharray: 600,
+                      strokeDashoffset: panelInView ? 0 : 600,
+                      transition: "stroke-dashoffset 1.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.4s",
+                    }}
                   />
 
-                  {/* Dots on line points */}
                   {chartPoints.split(" ").map((pt, i) => {
                     const [x, y] = pt.split(",").map(Number);
                     return (
@@ -139,22 +182,16 @@ export default function Inicio() {
                         fill="white"
                         stroke="#2EBFC0"
                         strokeWidth="2"
-                        className="animate-chart-fill"
+                        style={{
+                          opacity: panelInView ? 1 : 0,
+                          transition: `opacity 0.3s ease-out ${1.2 + i * 0.1}s`,
+                        }}
                       />
                     );
                   })}
 
-                  {/* X-axis labels */}
                   {["ENE","FEB","MAR","ABR","MAY","JUN","JUL"].map((m, i) => (
-                    <text
-                      key={m}
-                      x={20 + i * 60}
-                      y={108}
-                      textAnchor="middle"
-                      fontSize="8"
-                      fill="#9CA3AF"
-                      fontFamily="inherit"
-                    >
+                    <text key={m} x={20 + i * 60} y={108} textAnchor="middle" fontSize="8" fill="#9CA3AF" fontFamily="inherit">
                       {m}
                     </text>
                   ))}
@@ -171,8 +208,11 @@ export default function Inicio() {
                     <span className="text-xs text-[#1E2D3D] font-medium w-20 shrink-0">{label}</span>
                     <div className="flex-1 bg-gray-200 rounded-full h-1.5 overflow-hidden">
                       <div
-                        className={`h-full bg-[#2EBFC0] rounded-full animate-bar animate-bar-${i + 1}`}
-                        style={{ "--bar-width": `${pct}%` } as React.CSSProperties}
+                        className="h-full bg-[#2EBFC0] rounded-full"
+                        style={{
+                          width: panelInView ? `${pct}%` : "0%",
+                          transition: `width 0.9s cubic-bezier(0.25, 0.46, 0.45, 0.94) ${1.6 + i * 0.15}s`,
+                        }}
                       />
                     </div>
                     <span className="text-xs font-semibold text-[#1E2D3D] w-8 text-right">{pct}%</span>
@@ -183,6 +223,24 @@ export default function Inicio() {
           </div>
 
         </div>
+
+        {/* ── Bottom stats strip ── */}
+        <div
+          ref={statsRef}
+          className="mt-16 pt-10 border-t border-gray-200 grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-gray-200"
+        >
+          {[
+            { value: `+${count50}`,   label: "Temas analizados",           cls: statsInView ? "animate-stat-1" : "opacity-0" },
+            { value: `+${count10k}k`, label: "Respuestas ciudadanas",      cls: statsInView ? "animate-stat-2" : "opacity-0" },
+            { value: typeword || " ", label: "Nuevos informes publicados",  cls: statsInView ? "animate-stat-3" : "opacity-0" },
+          ].map(({ value, label, cls }) => (
+            <div key={label} className={`${cls} flex flex-col items-center py-6 sm:py-0 gap-1`}>
+              <span className="text-4xl sm:text-5xl font-bold text-[#1E2D3D] tabular-nums">{value}</span>
+              <span className="text-sm text-[#6B7280] mt-1">{label}</span>
+            </div>
+          ))}
+        </div>
+
       </div>
     </section>
   );
