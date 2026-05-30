@@ -6,6 +6,7 @@ import Encuestas from "@/components/sections/Encuestas";
 import Informes from "@/components/sections/Informes";
 import Videos from "@/components/sections/Videos";
 import QuienesSomos from "@/components/sections/QuienesSomos";
+import Participar from "@/components/sections/Participar";
 
 export default function Home() {
   return (
@@ -19,7 +20,7 @@ export default function Home() {
         <Informes />
         <Videos />
         <QuienesSomos />
-        {/* Contacto section coming next */}
+        <Participar />
       </main>
     </>
   );
