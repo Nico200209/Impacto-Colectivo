@@ -1,30 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-
-/* ── Fires once when the element enters the viewport ── */
-function useInView<T extends Element>(threshold = 0.2) {
-  const ref = useRef<T>(null);
-  const [inView, setInView] = useState(false);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setInView(true);
-          observer.disconnect();
-        }
-      },
-      { threshold }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [threshold]);
-
-  return [ref, inView] as const;
-}
+import { useEffect, useState } from "react";
+import { useInView } from "@/lib/hooks";
 
 /* ── Counts from 0 to target once enabled ── */
 function useCountUp(target: number, duration = 1400, delay = 0, enabled = false) {
