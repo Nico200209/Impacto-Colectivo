@@ -5,11 +5,12 @@ import Image from "next/image";
 
 const navLinks = [
   { label: "Inicio",    href: "#inicio" },
-  { label: "Nosotros",  href: "#nosotros" },
+  { label: "Impacto",   href: "#impacto" },
   { label: "Temas",     href: "#temas" },
   { label: "Encuestas", href: "#encuestas" },
   { label: "Informes",  href: "#informes" },
   { label: "Videos",    href: "#videos" },
+  { label: "Nosotros",  href: "#nosotros" },
 ];
 
 function smoothScrollTo(href: string) {
