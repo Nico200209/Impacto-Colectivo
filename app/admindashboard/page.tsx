@@ -23,6 +23,16 @@ interface Informe {
   file_path: string;
 }
 
+interface Video {
+  id: string;
+  title: string;
+  category: string;
+  published_date: string;
+  duration: string;
+  video_url: string;
+  file_path: string | null;
+}
+
 type ResponseMap = Record<string, Record<string, number>>;
 
 export default function AdminDashboard() {
@@ -39,6 +49,19 @@ export default function AdminDashboard() {
 
   // Informes state
   const [informes, setInformes] = useState<Informe[]>([]);
+
+  // Videos state
+  const [videos, setVideos] = useState<Video[]>([]);
+  const [videoMode, setVideoMode] = useState<"youtube" | "file">("youtube");
+  const [addVideoTitle, setAddVideoTitle] = useState("");
+  const [addVideoCategory, setAddVideoCategory] = useState("");
+  const [addVideoDate, setAddVideoDate] = useState("");
+  const [addVideoDuration, setAddVideoDuration] = useState("");
+  const [addVideoUrl, setAddVideoUrl] = useState("");
+  const [addVideoFile, setAddVideoFile] = useState<File | null>(null);
+  const [addingVideo, setAddingVideo] = useState(false);
+  const [addVideoError, setAddVideoError] = useState("");
+  const videoFileInputRef = useRef<HTMLInputElement>(null);
   const [uploadTitle, setUploadTitle] = useState("");
   const [uploadCategory, setUploadCategory] = useState("");
   const [uploadDate, setUploadDate] = useState("");
@@ -51,10 +74,11 @@ export default function AdminDashboard() {
 
   async function loadData() {
     setLoading(true);
-    const [surveysRes, responsesRes, informesRes] = await Promise.all([
+    const [surveysRes, responsesRes, informesRes, videosRes] = await Promise.all([
       fetch("/api/admin/surveys"),
       fetch("/api/admin/responses"),
       fetch("/api/informes"),
+      fetch("/api/admin/videos"),
     ]);
     if (surveysRes.status === 401 || responsesRes.status === 401) {
       router.push("/admindashboard/login");
@@ -63,9 +87,11 @@ export default function AdminDashboard() {
     const surveysData = await surveysRes.json();
     const responsesData = await responsesRes.json();
     const informesData = await informesRes.json();
+    const videosData = await videosRes.json();
     setSurveys(surveysData.surveys ?? []);
     setResponses(responsesData.responses ?? {});
     setInformes(informesData.informes ?? []);
+    setVideos(videosData.videos ?? []);
     setLoading(false);
   }
 
@@ -121,6 +147,72 @@ export default function AdminDashboard() {
       const data = await res.json();
       setSaveError(data.error ?? "Error al guardar");
     }
+  }
+
+  // Video handlers
+  async function handleAddVideo() {
+    if (!addVideoTitle.trim() || !addVideoCategory.trim() || !addVideoDate.trim() || !addVideoDuration.trim()) {
+      setAddVideoError("Todos los campos son requeridos.");
+      return;
+    }
+    if (videoMode === "youtube" && !addVideoUrl.trim()) {
+      setAddVideoError("Ingresa la URL de YouTube.");
+      return;
+    }
+    if (videoMode === "file" && !addVideoFile) {
+      setAddVideoError("Selecciona un archivo de video.");
+      return;
+    }
+    setAddVideoError("");
+    setAddingVideo(true);
+
+    let res: Response;
+    if (videoMode === "file" && addVideoFile) {
+      const fd = new FormData();
+      fd.append("title", addVideoTitle.trim());
+      fd.append("category", addVideoCategory.trim());
+      fd.append("published_date", addVideoDate.trim());
+      fd.append("duration", addVideoDuration.trim());
+      fd.append("file", addVideoFile);
+      res = await fetch("/api/admin/videos", { method: "POST", body: fd });
+    } else {
+      res = await fetch("/api/admin/videos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: addVideoTitle.trim(),
+          category: addVideoCategory.trim(),
+          published_date: addVideoDate.trim(),
+          duration: addVideoDuration.trim(),
+          video_url: addVideoUrl.trim(),
+        }),
+      });
+    }
+
+    setAddingVideo(false);
+    if (res.ok) {
+      setAddVideoTitle("");
+      setAddVideoCategory("");
+      setAddVideoDate("");
+      setAddVideoDuration("");
+      setAddVideoUrl("");
+      setAddVideoFile(null);
+      if (videoFileInputRef.current) videoFileInputRef.current.value = "";
+      await loadData();
+    } else {
+      const data = await res.json();
+      setAddVideoError(data.error ?? "Error al guardar el video");
+    }
+  }
+
+  async function handleDeleteVideo(id: string, filePath: string | null, title: string) {
+    if (!confirm(`¿Eliminar este video?\n\n"${title}"`)) return;
+    await fetch("/api/admin/videos", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, filePath }),
+    });
+    await loadData();
   }
 
   // Informe handlers
@@ -449,6 +541,130 @@ export default function AdminDashboard() {
                 </button>
               </div>
             </section>
+
+            {/* ── VIDEOS ─────────────────────────────── */}
+
+            {/* Videos list */}
+            <section>
+              <h2 className="text-sm font-bold tracking-[0.15em] uppercase text-[#6B7280] mb-4">
+                Videos publicados
+              </h2>
+              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                {videos.length === 0 ? (
+                  <p className="px-6 py-8 text-sm text-gray-400 text-center">No hay videos publicados aún.</p>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100 text-xs font-semibold text-[#6B7280] uppercase tracking-wide">
+                        <th className="px-6 py-3 text-left">Título</th>
+                        <th className="px-4 py-3 text-left">Categoría</th>
+                        <th className="px-4 py-3 text-center">Fecha</th>
+                        <th className="px-4 py-3 text-center">Duración</th>
+                        <th className="px-4 py-3" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {videos.map((video, i) => (
+                        <tr key={video.id} className={`border-b border-gray-100 last:border-0 ${i % 2 === 1 ? "bg-gray-50/50" : ""}`}>
+                          <td className="px-6 py-4 text-[#1E2D3D] font-medium max-w-xs">
+                            <span className="line-clamp-2">{video.title}</span>
+                          </td>
+                          <td className="px-4 py-4 text-[#6B7280] text-xs font-semibold uppercase tracking-wide">{video.category}</td>
+                          <td className="px-4 py-4 text-center text-[#6B7280] text-xs">{video.published_date}</td>
+                          <td className="px-4 py-4 text-center text-[#6B7280] text-xs font-mono">{video.duration}</td>
+                          <td className="px-4 py-4 text-center">
+                            <button onClick={() => handleDeleteVideo(video.id, video.file_path, video.title)} className="p-2 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors" title="Eliminar">
+                              <MdDelete size={18} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </section>
+
+            {/* Add video */}
+            <section>
+              <h2 className="text-sm font-bold tracking-[0.15em] uppercase text-[#6B7280] mb-4">
+                Agregar video
+              </h2>
+              <div className="bg-white rounded-2xl border border-gray-200 p-6 flex flex-col gap-5">
+
+                {/* Mode toggle */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setVideoMode("youtube"); setAddVideoError(""); }}
+                    className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${videoMode === "youtube" ? "bg-[#2EBFC0] text-white" : "bg-gray-100 text-[#6B7280] hover:bg-gray-200"}`}
+                  >
+                    URL de YouTube
+                  </button>
+                  <button
+                    onClick={() => { setVideoMode("file"); setAddVideoError(""); }}
+                    className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${videoMode === "file" ? "bg-[#2EBFC0] text-white" : "bg-gray-100 text-[#6B7280] hover:bg-gray-200"}`}
+                  >
+                    Subir archivo
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FormField label="Título del video">
+                    <input type="text" value={addVideoTitle} onChange={(e) => setAddVideoTitle(e.target.value)}
+                      placeholder="¿Por qué sube el combustible?…"
+                      className={inputCls} />
+                  </FormField>
+                  <FormField label="Categoría">
+                    <input type="text" value={addVideoCategory} onChange={(e) => setAddVideoCategory(e.target.value)}
+                      placeholder="Economía, Educación, Salud…"
+                      className={inputCls} />
+                  </FormField>
+                  <FormField label="Fecha de publicación">
+                    <input type="text" value={addVideoDate} onChange={(e) => setAddVideoDate(e.target.value)}
+                      placeholder="Mayo 2026"
+                      className={inputCls} />
+                  </FormField>
+                  <FormField label="Duración (mm:ss)">
+                    <input type="text" value={addVideoDuration} onChange={(e) => setAddVideoDuration(e.target.value)}
+                      placeholder="12:34"
+                      className={inputCls} />
+                  </FormField>
+
+                  <div className="sm:col-span-2">
+                    {videoMode === "youtube" ? (
+                      <FormField label="URL de YouTube">
+                        <input type="url" value={addVideoUrl} onChange={(e) => setAddVideoUrl(e.target.value)}
+                          placeholder="https://www.youtube.com/watch?v=…"
+                          className={inputCls} />
+                      </FormField>
+                    ) : (
+                      <FormField label="Archivo de video">
+                        <label className="flex items-center gap-3 px-4 py-3 rounded-xl border border-dashed border-gray-300 cursor-pointer hover:border-[#2EBFC0] hover:bg-[#2EBFC0]/5 transition-all">
+                          <MdUploadFile size={20} className="text-[#6B7280] shrink-0" />
+                          <span className="text-sm text-[#6B7280] truncate">
+                            {addVideoFile ? addVideoFile.name : "Seleccionar video (MP4, MOV, WebM…)"}
+                          </span>
+                          <input
+                            ref={videoFileInputRef}
+                            type="file"
+                            accept="video/*"
+                            className="hidden"
+                            onChange={(e) => setAddVideoFile(e.target.files?.[0] ?? null)}
+                          />
+                        </label>
+                      </FormField>
+                    )}
+                  </div>
+                </div>
+
+                {addVideoError && <p className="text-xs text-red-500 font-medium">{addVideoError}</p>}
+                <button onClick={handleAddVideo} disabled={addingVideo}
+                  className="self-start px-6 py-3 rounded-xl bg-[#2EBFC0] text-white font-semibold text-sm hover:bg-[#27aaab] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                  {addingVideo ? "Subiendo…" : "Publicar video"}
+                </button>
+              </div>
+            </section>
+
           </>
         )}
       </main>

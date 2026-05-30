@@ -4,6 +4,7 @@ import Nosotros from "@/components/sections/Nosotros";
 import Temas from "@/components/sections/Temas";
 import Encuestas from "@/components/sections/Encuestas";
 import Informes from "@/components/sections/Informes";
+import Videos from "@/components/sections/Videos";
 
 export default function Home() {
   return (
@@ -15,7 +16,8 @@ export default function Home() {
         <Temas />
         <Encuestas />
         <Informes />
-        {/* Next sections will be added here */}
+        <Videos />
+        {/* Contacto section coming next */}
       </main>
     </>
   );
