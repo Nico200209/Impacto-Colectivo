@@ -72,6 +72,26 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ survey: data });
 }
 
+export async function PATCH(req: NextRequest) {
+  if (!(await isAdmin())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { id, active } = await req.json();
+  if (!id || typeof active !== "boolean") {
+    return NextResponse.json({ error: "id and active required" }, { status: 400 });
+  }
+
+  const admin = getAdminSupabase();
+  const { error } = await admin.from("surveys").update({ active }).eq("id", id);
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true });
+}
+
 export async function DELETE(req: NextRequest) {
   if (!(await isAdmin())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

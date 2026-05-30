@@ -1,16 +1,31 @@
 # Impacto Colectivo — Website Reference
 
 ## Stack
-- Next.js 15 (App Router) · TypeScript · TailwindCSS v4 · npm · Vercel
+- Next.js 16 (App Router) · TypeScript · TailwindCSS v4 · npm · Vercel
 - `react-icons` installed (use `react-icons/md` for Material Design icons)
+- `@supabase/supabase-js` installed — Supabase for DB + Storage
 - No other UI libraries — all components hand-built
 
 ## Project Structure
 ```
 app/
-  globals.css       — brand tokens, all CSS animation keyframes
-  layout.tsx        — lang="es", Geist Sans font, metadata
-  page.tsx          — assembles Navbar + all sections
+  globals.css          — brand tokens, all CSS animation keyframes
+  layout.tsx           — lang="es", Geist Sans font, metadata
+  page.tsx             — assembles Navbar + all sections
+  api/
+    survey/
+      route.ts         — GET (count by surveyId), POST (submit response)
+      list/route.ts    — GET active surveys from DB (public)
+    informes/route.ts  — GET all informes (public)
+    admin/
+      auth/route.ts    — POST login, DELETE logout (sets httpOnly cookie)
+      surveys/route.ts — GET/POST/PATCH/DELETE surveys (admin)
+      responses/route.ts — GET all responses grouped (admin)
+      informes/route.ts  — POST upload PDF, DELETE informe (admin)
+  admindashboard/
+    page.tsx           — main admin dashboard (protected)
+    login/page.tsx     — password login page
+    surveys/[id]/page.tsx — survey detail + charts + hide/delete
 
 components/
   Navbar.tsx
@@ -18,13 +33,16 @@ components/
     Inicio.tsx      ✅
     Nosotros.tsx    ✅
     Temas.tsx       ✅
-    Encuestas.tsx   🔲
-    Informes.tsx    🔲
+    Encuestas.tsx   ✅ (dynamic, fetches from DB)
+    Informes.tsx    ✅ (dynamic, fetches from DB)
     Videos.tsx      🔲
     Contacto.tsx    🔲
 
 lib/
-  hooks.ts          — shared useInView hook (export only)
+  hooks.ts        — shared useInView hook
+  supabase.ts     — exports `supabase` (anon) and `getAdminSupabase()` (service role)
+
+middleware.ts     — protects /admindashboard/* (checks admin_session cookie)
 
 public/
   logos/
@@ -33,97 +51,93 @@ public/
     IC_Logo Hor.png — horizontal variant
 ```
 
+## Env Vars (`.env.local` + Vercel)
+```
+NEXT_PUBLIC_SUPABASE_URL=https://xojdrgzbvwsxrpcictcr.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...   (legacy anon key)
+SUPABASE_SERVICE_ROLE_KEY=eyJ...       (service role secret, server-side only)
+ADMIN_PASSWORD=...                      (password for /admindashboard)
+```
+
+## Supabase DB Tables
+- **surveys** — id (uuid), question, options (text[]), active (bool), created_at
+  - RLS: public SELECT where active=true
+  - Admin uses service role for all operations
+- **survey_responses** — id, survey_id (uuid FK), selected_option, created_at
+  - RLS: public INSERT + SELECT
+- **informes** — id, title, category, published_date, pages (int), file_size, file_url, file_path, created_at
+  - RLS: public SELECT
+- **Storage bucket:** `informes` (public) — stores PDF files
+
+## Admin Dashboard (`/admindashboard`)
+- Protected by middleware checking `admin_session` cookie === `ADMIN_PASSWORD`
+- Login page at `/admindashboard/login`
+- Sections: survey overview cards → response charts → survey management table → add survey form → informes list → upload informe form
+- Survey rows are clickable → `/admindashboard/surveys/[id]` (detail + charts)
+- Survey toggle (eye icon) sets `active` true/false without deleting responses
+- Informe upload: FormData with PDF → Supabase Storage → DB insert
+
 ## Brand Tokens
 - **Teal:** `#2EBFC0` — primary color, CTAs, accents, icons
 - **Dark navy:** `#1E2D3D` — headings, dark text
 - **Gray:** `#6B7280` — body text, labels
 - **White:** `#ffffff` — card backgrounds, default bg
-- **Light gray bg:** `bg-gray-50` — used for alternating sections (Temas)
+- **Light gray bg:** `bg-gray-50` — alternating sections (Temas, Informes)
 
 ## Navbar (`components/Navbar.tsx`)
 - Fixed top, `z-50`, white bg with bottom border
 - Logo left · Nav links center · "Participar" outlined button right · hamburger far right
-- Nav links: Inicio · Temas · Encuestas · Informes · Videos · Nosotros · Contacto
-- All links are anchor links: `href="#inicio"`, `href="#temas"`, etc.
-- Mobile: hamburger (≡) toggles animated dropdown with all links
-- On scroll: `.navbar-scrolled` class added via JS → frosted glass effect (`rgba(255,255,255,0.85)` + `backdrop-filter: blur(12px)`)
+- Nav links order: Inicio · Nosotros · Temas · Encuestas · Informes · Videos
+- All links: anchor links with smooth scroll via `scrollIntoView({ behavior: "smooth" })`
+- "Participar" button → scrolls to `#encuestas`
+- Mobile: hamburger toggles animated dropdown
+- On scroll: `.navbar-scrolled` → frosted glass effect
 
 ## Animation System
 
 ### Core Rule
-**All animations are triggered by IntersectionObserver** — elements start invisible and only animate when scrolled into view. This ensures animations replay correctly on Cmd+R and work for off-screen sections.
+All animations triggered by IntersectionObserver — elements start invisible, animate on scroll into view, replay on Cmd+R.
 
 ### Shared Hook (`lib/hooks.ts`)
 ```ts
 useInView<T extends Element>(threshold = 0.2)
-// Returns [ref, inView] — fires once when element enters viewport, then disconnects
-```
-Import in every section: `import { useInView } from "@/lib/hooks"`
-
-### CSS Animation Classes (`app/globals.css`)
-Used for text/element reveals — apply conditionally: `className={inView ? "animate-reveal" : "opacity-0"}`
-
-| Class | Effect |
-|---|---|
-| `animate-reveal` | fadeSlideUp immediately |
-| `animate-reveal-d1` | fadeSlideUp, 0.1s delay |
-| `animate-reveal-d2` | fadeSlideUp, 0.22s delay |
-| `animate-reveal-d3` | fadeSlideUp, 0.36s delay |
-| `animate-reveal-d4` | fadeSlideUp, 0.5s delay |
-| `animate-stat-1/2/3` | statReveal, staggered (0.3/0.45/0.6s) |
-| `.navbar-scrolled` | frosted glass navbar |
-
-### Inline Style Transitions (preferred for SVG/bars)
-CSS keyframes don't reliably restart when class is toggled. Use inline `style` transitions instead:
-
-**SVG line draw:**
-```tsx
-style={{
-  strokeDasharray: 600,
-  strokeDashoffset: inView ? 0 : 600,
-  transition: "stroke-dashoffset 1.4s cubic-bezier(0.25,0.46,0.45,0.94) 0.4s",
-}}
+// Returns [ref, inView] — fires once, then disconnects
 ```
 
-**Progress bars:**
-```tsx
-style={{
-  width: inView ? `${pct}%` : "0%",
-  transition: `width 0.9s cubic-bezier(0.25,0.46,0.45,0.94) ${0.7 + i * 0.15}s`,
-}}
-```
+### CSS Animation Classes (text reveals only)
+`className={inView ? "animate-reveal" : "opacity-0"}`
+- `animate-reveal` / `animate-reveal-d1` through `animate-reveal-d4` — staggered fadeSlideUp
+- `animate-stat-1/2/3` — stat number reveal
 
-**Opacity fade (cards, SVG fills):**
+### Inline Style Transitions (SVG, bars, cards)
 ```tsx
-style={{
-  opacity: inView ? 1 : 0,
-  transition: `opacity 0.5s ease-out ${i * 0.09}s`,
-}}
-```
-
-**Staggered card entrance (used in Temas):**
-```tsx
+// Staggered card entrance (Encuestas, Informes, Temas)
 style={{
   opacity: inView ? 1 : 0,
   transform: inView ? "translateY(0)" : "translateY(20px)",
   transition: `opacity 0.5s ease-out ${i * 0.09}s, transform 0.5s ease-out ${i * 0.09}s`,
 }}
+// Progress bars
+style={{ width: inView ? `${pct}%` : "0%", transition: `width 0.9s cubic-bezier(...) ${delay}s` }}
+// SVG line draw
+style={{ strokeDasharray: 600, strokeDashoffset: inView ? 0 : 600, transition: "stroke-dashoffset 1.4s ..." }}
 ```
 
 ## Section Patterns
 
-### Standard two-column section (Inicio, Nosotros)
+### Standard two-column (Inicio, Nosotros)
 - `max-w-7xl mx-auto px-4 sm:px-6 lg:px-8`
 - `grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center`
-- Left: text content with staggered `animate-reveal-dX`
-- Right: decorative visual (SVG / card panel)
-- Two separate `useInView` refs: one for text, one for visual
+- Two `useInView` refs: text + visual
 
-### Full-width section with card grid (Temas)
-- `bg-gray-50` background
-- Header left-aligned above grid
-- Grid container: `rounded-2xl border border-gray-200 bg-white overflow-hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3`
-- Internal dividers via inline `borderRight` / `borderBottom` on each card based on `col = i % 3` and `row = Math.floor(i / 3)`
+### Card grid with dividers (Temas, Informes)
+- Container: `rounded-2xl border border-gray-200 bg-white overflow-hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3`
+- Dividers via inline style: `borderRight: col < maxCol ? "1px solid #e5e7eb" : "none"`, same for `borderBottom`
+
+### Dynamic section with loading skeleton (Encuestas, Informes)
+- Fetch on mount from public API route
+- Show skeleton placeholders while loading
+- Empty state message if no data
 
 ## Sections Status & Details
 
@@ -132,27 +146,21 @@ style={{
 | 1 | `#inicio` | Inicio | `sections/Inicio.tsx` | ✅ |
 | 2 | `#nosotros` | Nosotros | `sections/Nosotros.tsx` | ✅ |
 | 3 | `#temas` | Temas | `sections/Temas.tsx` | ✅ |
-| 4 | `#encuestas` | Encuestas | `sections/Encuestas.tsx` | 🔲 |
-| 5 | `#informes` | Informes | `sections/Informes.tsx` | 🔲 |
+| 4 | `#encuestas` | Encuestas | `sections/Encuestas.tsx` | ✅ |
+| 5 | `#informes` | Informes | `sections/Informes.tsx` | ✅ |
 | 6 | `#videos` | Videos | `sections/Videos.tsx` | 🔲 |
 | 7 | `#contacto` | Contacto | `sections/Contacto.tsx` | 🔲 |
 
-### Inicio (Hero)
-- Two-column: left text + right data panel card
-- Right panel: "Panel de Análisis" with 3 stat chips (50 Temas, 10.2k Respuestas, 92% Activos), SVG line chart (ENE–JUL), 4 progress bars (Economía 86%, Salud 72%, Educación 65%, Energía 58%)
-- Bottom stats strip: +50 Temas analizados · +10k Respuestas ciudadanas · Mensual (typewriter)
-- `useCountUp` and `useTypewriter` hooks defined locally in Inicio.tsx (not shared)
+### Encuestas ✅
+- `bg-white`, 2-column card grid, surveys fetched from `GET /api/survey/list`
+- Each `SurveyCard`: radio options, submit → `POST /api/survey`, thank-you state
+- Loading skeleton shown while fetching
 
-### Nosotros
-- Two-column: left text + right network SVG visualization
-- Right: dot-grid CSS background + SVG with 6 nodes + connecting lines + 2 floating cards ("COBERTURA / 6 áreas" and "PERIODICIDAD / Mensual")
-- Lines animate via `strokeDashoffset` transition; nodes and cards fade in after
-
-### Temas
-- `bg-gray-50`, 3×2 card grid
-- Icons from `react-icons/md`: MdLocalGasStation, MdShoppingBasket, MdSchool, MdHome, MdMonitorHeart, MdVisibility
-- Cards: icon in teal bg square + title + description
-- Dividers: inline `borderRight`/`borderBottom` per cell index
+### Informes ✅
+- `bg-gray-50`, 2-column card grid with dividers (same pattern as Temas)
+- Data fetched from `GET /api/informes`
+- Each card: `MdArticle` icon, category, title, metadata, "Descargar" link → PDF URL
+- Loading skeleton shown while fetching
 
 ## Dev Commands
 ```bash
@@ -160,3 +168,8 @@ npm run dev      # start dev server → localhost:3000
 npm run build    # production build
 npm run lint     # ESLint
 ```
+
+## Pending
+- Videos section (#6) — user will provide design mockup
+- Contacto section (#7) — user will provide design mockup
+- `package-lock.json` should be committed (Vercel needs it)

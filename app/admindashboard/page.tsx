@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MdDelete, MdAdd, MdRemove, MdUploadFile } from "react-icons/md";
+import { MdDelete, MdAdd, MdRemove, MdUploadFile, MdVisibility, MdVisibilityOff } from "react-icons/md";
 
 interface Survey {
   id: string;
@@ -80,6 +80,15 @@ export default function AdminDashboard() {
   }
 
   // Survey handlers
+  async function handleToggleSurvey(id: string, currentActive: boolean) {
+    await fetch("/api/admin/surveys", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, active: !currentActive }),
+    });
+    await loadData();
+  }
+
   async function handleDeleteSurvey(id: string, question: string) {
     if (!confirm(`¿Eliminar esta encuesta?\n\n"${question}"\n\nSe eliminarán también todas sus respuestas.`)) return;
     await fetch("/api/admin/surveys", {
@@ -262,7 +271,11 @@ export default function AdminDashboard() {
                     </thead>
                     <tbody>
                       {surveys.map((survey, i) => (
-                        <tr key={survey.id} className={`border-b border-gray-100 last:border-0 ${i % 2 === 1 ? "bg-gray-50/50" : ""}`}>
+                        <tr
+                          key={survey.id}
+                          onClick={() => router.push(`/admindashboard/surveys/${survey.id}`)}
+                          className={`border-b border-gray-100 last:border-0 cursor-pointer hover:bg-[#2EBFC0]/5 transition-colors ${i % 2 === 1 ? "bg-gray-50/50" : ""} ${!survey.active ? "opacity-50" : ""}`}
+                        >
                           <td className="px-6 py-4 text-[#1E2D3D] font-medium max-w-xs">
                             <span className="line-clamp-2">{survey.question}</span>
                           </td>
@@ -270,13 +283,22 @@ export default function AdminDashboard() {
                           <td className="px-4 py-4 text-center font-semibold text-[#1E2D3D]">{survey.responseCount}</td>
                           <td className="px-4 py-4 text-center">
                             <span className={`inline-flex text-[10px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full ${survey.active ? "bg-[#2EBFC0]/10 text-[#2EBFC0]" : "bg-gray-100 text-gray-400"}`}>
-                              {survey.active ? "Activa" : "Inactiva"}
+                              {survey.active ? "Activa" : "Oculta"}
                             </span>
                           </td>
-                          <td className="px-4 py-4 text-center">
-                            <button onClick={() => handleDeleteSurvey(survey.id, survey.question)} className="p-2 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors" title="Eliminar">
-                              <MdDelete size={18} />
-                            </button>
+                          <td className="px-4 py-4 text-center" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => handleToggleSurvey(survey.id, survey.active)}
+                                className={`p-2 rounded-lg transition-colors ${survey.active ? "text-gray-400 hover:text-gray-600 hover:bg-gray-100" : "text-[#2EBFC0] hover:bg-[#2EBFC0]/10"}`}
+                                title={survey.active ? "Ocultar" : "Mostrar"}
+                              >
+                                {survey.active ? <MdVisibilityOff size={18} /> : <MdVisibility size={18} />}
+                              </button>
+                              <button onClick={() => handleDeleteSurvey(survey.id, survey.question)} className="p-2 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors" title="Eliminar">
+                                <MdDelete size={18} />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
