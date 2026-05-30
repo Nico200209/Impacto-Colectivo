@@ -10,20 +10,6 @@ interface Survey {
   options: string[];
 }
 
-const surveys: Survey[] = [
-  {
-    id: "combustible",
-    question: "¿Cuánto le preocupa el aumento en el precio del combustible?",
-    options: ["Mucho", "Algo", "Poco", "Nada"],
-  },
-  {
-    id: "salud",
-    question:
-      "¿Cómo califica el acceso a los servicios de salud pública en su comunidad?",
-    options: ["Excelente", "Bueno", "Regular", "Deficiente"],
-  },
-];
-
 /* ── Individual survey card ── */
 function SurveyCard({
   survey,
@@ -73,13 +59,11 @@ function SurveyCard({
         transition: `opacity 0.55s ease-out ${index * 0.15}s, transform 0.55s ease-out ${index * 0.15}s`,
       }}
     >
-      {/* Badge */}
       <span className="inline-flex self-start text-[10px] font-bold tracking-[0.15em] uppercase bg-[#2EBFC0]/10 text-[#2EBFC0] px-3 py-1 rounded-full">
         Encuesta activa
       </span>
 
       {submitted ? (
-        /* ── Thank-you state ── */
         <div className="flex flex-col items-center justify-center flex-1 py-10 gap-4 text-center">
           <MdCheckCircle size={48} className="text-[#2EBFC0]" />
           <p className="font-bold text-[#1E2D3D] text-lg">
@@ -95,7 +79,6 @@ function SurveyCard({
           )}
         </div>
       ) : (
-        /* ── Active survey state ── */
         <>
           <p className="font-bold text-[#1E2D3D] text-base sm:text-lg mt-4 mb-5 leading-snug">
             {survey.question}
@@ -148,10 +131,40 @@ function SurveyCard({
   );
 }
 
+/* ── Skeleton placeholder while surveys load ── */
+function SurveyCardSkeleton({ index, inView }: { index: number; inView: boolean }) {
+  return (
+    <div
+      className="rounded-2xl border border-gray-200 bg-white p-6 sm:p-8"
+      style={{
+        opacity: inView ? 1 : 0,
+        transition: `opacity 0.55s ease-out ${index * 0.15}s`,
+      }}
+    >
+      <div className="w-28 h-5 bg-gray-100 rounded-full mb-6 animate-pulse" />
+      <div className="w-full h-4 bg-gray-100 rounded mb-2 animate-pulse" />
+      <div className="w-3/4 h-4 bg-gray-100 rounded mb-6 animate-pulse" />
+      {[1, 2, 3, 4].map((i) => (
+        <div key={i} className="h-11 bg-gray-50 rounded-xl border border-gray-100 mb-2 animate-pulse" />
+      ))}
+    </div>
+  );
+}
+
 /* ── Section ── */
 export default function Encuestas() {
   const [headerRef, headerInView] = useInView<HTMLDivElement>(0.15);
   const [gridRef, gridInView] = useInView<HTMLDivElement>(0.1);
+  const [surveys, setSurveys] = useState<Survey[]>([]);
+  const [loadingSurveys, setLoadingSurveys] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/survey/list")
+      .then((r) => r.json())
+      .then((data) => setSurveys(data.surveys ?? []))
+      .catch(() => setSurveys([]))
+      .finally(() => setLoadingSurveys(false));
+  }, []);
 
   return (
     <section id="encuestas" className="bg-white py-20 lg:py-28">
@@ -188,14 +201,24 @@ export default function Encuestas() {
           ref={gridRef}
           className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8"
         >
-          {surveys.map((survey, i) => (
-            <SurveyCard
-              key={survey.id}
-              survey={survey}
-              index={i}
-              inView={gridInView}
-            />
-          ))}
+          {loadingSurveys ? (
+            [0, 1].map((i) => (
+              <SurveyCardSkeleton key={i} index={i} inView={gridInView} />
+            ))
+          ) : surveys.length === 0 ? (
+            <p className="text-sm text-[#6B7280] col-span-2 text-center py-10">
+              No hay encuestas activas en este momento.
+            </p>
+          ) : (
+            surveys.map((survey, i) => (
+              <SurveyCard
+                key={survey.id}
+                survey={survey}
+                index={i}
+                inView={gridInView}
+              />
+            ))
+          )}
         </div>
 
       </div>
