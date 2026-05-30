@@ -7,6 +7,7 @@ import Informes from "@/components/sections/Informes";
 import Videos from "@/components/sections/Videos";
 import QuienesSomos from "@/components/sections/QuienesSomos";
 import Participar from "@/components/sections/Participar";
+import Contacto from "@/components/sections/Contacto";
 
 export default function Home() {
   return (
@@ -21,6 +22,7 @@ export default function Home() {
         <Videos />
         <QuienesSomos />
         <Participar />
+        <Contacto />
       </main>
     </>
   );
