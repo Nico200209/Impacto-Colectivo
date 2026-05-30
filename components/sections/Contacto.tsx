@@ -63,7 +63,7 @@ export default function Contacto() {
                 </div>
                 <div>
                   <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-[#6B7280]">Correo</p>
-                  <p className="text-sm font-medium text-[#1E2D3D]">contacto@impactocolectivo.do</p>
+                  <p className="text-sm font-medium text-[#1E2D3D]">impactocolectivo@outlook.com</p>
                 </div>
               </div>
 
