@@ -17,7 +17,7 @@ One-page site. Navbar links are anchor links (`#section-id`). All sections live 
 | # | ID           | Label      | Component                              | Status   |
 |---|--------------|------------|----------------------------------------|----------|
 | 1 | `#inicio`    | Inicio     | `components/sections/Inicio.tsx`       | ✅ Done  |
-| 2 | `#nosotros`  | Nosotros   | `components/sections/Nosotros.tsx`     | 🔲 Next  |
+| 2 | `#nosotros`  | Nosotros   | `components/sections/Nosotros.tsx`     | ✅ Done  |
 | 3 | `#temas`     | Temas      | `components/sections/Temas.tsx`        | 🔲 Pending |
 | 4 | `#encuestas` | Encuestas  | `components/sections/Encuestas.tsx`    | 🔲 Pending |
 | 5 | `#informes`  | Informes   | `components/sections/Informes.tsx`     | 🔲 Pending |
