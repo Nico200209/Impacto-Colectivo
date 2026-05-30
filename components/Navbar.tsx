@@ -11,6 +11,7 @@ const navLinks = [
   { label: "Informes",  href: "#informes" },
   { label: "Videos",    href: "#videos" },
   { label: "Nosotros",  href: "#nosotros" },
+  { label: "Contacto",  href: "#contacto" },
 ];
 
 function smoothScrollTo(href: string) {
