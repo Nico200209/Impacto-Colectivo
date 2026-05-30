@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MdDelete, MdAdd, MdRemove } from "react-icons/md";
+import { MdDelete, MdAdd, MdRemove, MdUploadFile } from "react-icons/md";
 
 interface Survey {
   id: string;
@@ -12,25 +12,49 @@ interface Survey {
   responseCount: number;
 }
 
+interface Informe {
+  id: string;
+  title: string;
+  category: string;
+  published_date: string;
+  pages: number;
+  file_size: string;
+  file_url: string;
+  file_path: string;
+}
+
 type ResponseMap = Record<string, Record<string, number>>;
 
 export default function AdminDashboard() {
   const router = useRouter();
+
+  // Surveys state
   const [surveys, setSurveys] = useState<Survey[]>([]);
   const [responses, setResponses] = useState<ResponseMap>({});
   const [loading, setLoading] = useState(true);
-
-  // New survey form state
   const [newQuestion, setNewQuestion] = useState("");
   const [newOptions, setNewOptions] = useState(["", ""]);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
+  // Informes state
+  const [informes, setInformes] = useState<Informe[]>([]);
+  const [uploadTitle, setUploadTitle] = useState("");
+  const [uploadCategory, setUploadCategory] = useState("");
+  const [uploadDate, setUploadDate] = useState("");
+  const [uploadPages, setUploadPages] = useState("");
+  const [uploadFileSize, setUploadFileSize] = useState("");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   async function loadData() {
     setLoading(true);
-    const [surveysRes, responsesRes] = await Promise.all([
+    const [surveysRes, responsesRes, informesRes] = await Promise.all([
       fetch("/api/admin/surveys"),
       fetch("/api/admin/responses"),
+      fetch("/api/informes"),
     ]);
     if (surveysRes.status === 401 || responsesRes.status === 401) {
       router.push("/admindashboard/login");
@@ -38,8 +62,10 @@ export default function AdminDashboard() {
     }
     const surveysData = await surveysRes.json();
     const responsesData = await responsesRes.json();
+    const informesData = await informesRes.json();
     setSurveys(surveysData.surveys ?? []);
     setResponses(responsesData.responses ?? {});
+    setInformes(informesData.informes ?? []);
     setLoading(false);
   }
 
@@ -53,7 +79,8 @@ export default function AdminDashboard() {
     router.push("/admindashboard/login");
   }
 
-  async function handleDelete(id: string, question: string) {
+  // Survey handlers
+  async function handleDeleteSurvey(id: string, question: string) {
     if (!confirm(`¿Eliminar esta encuesta?\n\n"${question}"\n\nSe eliminarán también todas sus respuestas.`)) return;
     await fetch("/api/admin/surveys", {
       method: "DELETE",
@@ -63,7 +90,7 @@ export default function AdminDashboard() {
     await loadData();
   }
 
-  async function handleSave() {
+  async function handleSaveSurvey() {
     const cleanOptions = newOptions.filter((o) => o.trim() !== "");
     if (!newQuestion.trim() || cleanOptions.length < 2) {
       setSaveError("Se requiere una pregunta y al menos 2 opciones.");
@@ -84,6 +111,49 @@ export default function AdminDashboard() {
     } else {
       const data = await res.json();
       setSaveError(data.error ?? "Error al guardar");
+    }
+  }
+
+  // Informe handlers
+  async function handleDeleteInforme(id: string, filePath: string, title: string) {
+    if (!confirm(`¿Eliminar este informe?\n\n"${title}"\n\nSe eliminará también el archivo PDF.`)) return;
+    await fetch("/api/admin/informes", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, filePath }),
+    });
+    await loadData();
+  }
+
+  async function handleUploadInforme() {
+    if (!uploadTitle.trim() || !uploadCategory.trim() || !uploadDate.trim() || !uploadPages || !uploadFileSize.trim() || !uploadFile) {
+      setUploadError("Todos los campos son requeridos, incluyendo el archivo PDF.");
+      return;
+    }
+    setUploadError("");
+    setUploading(true);
+    const fd = new FormData();
+    fd.append("title", uploadTitle.trim());
+    fd.append("category", uploadCategory.trim());
+    fd.append("published_date", uploadDate.trim());
+    fd.append("pages", uploadPages);
+    fd.append("file_size", uploadFileSize.trim());
+    fd.append("file", uploadFile);
+
+    const res = await fetch("/api/admin/informes", { method: "POST", body: fd });
+    setUploading(false);
+    if (res.ok) {
+      setUploadTitle("");
+      setUploadCategory("");
+      setUploadDate("");
+      setUploadPages("");
+      setUploadFileSize("");
+      setUploadFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      await loadData();
+    } else {
+      const data = await res.json();
+      setUploadError(data.error ?? "Error al subir el informe");
     }
   }
 
@@ -114,10 +184,12 @@ export default function AdminDashboard() {
           </div>
         ) : (
           <>
+            {/* ── ENCUESTAS ─────────────────────────────── */}
+
             {/* Overview */}
             <section>
               <h2 className="text-sm font-bold tracking-[0.15em] uppercase text-[#6B7280] mb-4">
-                Resumen
+                Resumen — Encuestas
               </h2>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 <StatCard label="Total respuestas" value={totalResponses.toLocaleString("es-DO")} />
@@ -152,21 +224,12 @@ export default function AdminDashboard() {
                             const pct = total > 0 ? Math.round((count / total) * 100) : 0;
                             return (
                               <div key={opt} className="flex items-center gap-3">
-                                <span className="text-xs text-[#1E2D3D] font-medium w-28 shrink-0 truncate">
-                                  {opt}
-                                </span>
+                                <span className="text-xs text-[#1E2D3D] font-medium w-28 shrink-0 truncate">{opt}</span>
                                 <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-                                  <div
-                                    className="h-full bg-[#2EBFC0] rounded-full transition-all duration-700"
-                                    style={{ width: `${pct}%` }}
-                                  />
+                                  <div className="h-full bg-[#2EBFC0] rounded-full" style={{ width: `${pct}%` }} />
                                 </div>
-                                <span className="text-xs font-semibold text-[#1E2D3D] w-10 text-right shrink-0">
-                                  {pct}%
-                                </span>
-                                <span className="text-xs text-[#6B7280] w-16 text-right shrink-0">
-                                  {count} resp.
-                                </span>
+                                <span className="text-xs font-semibold text-[#1E2D3D] w-10 text-right shrink-0">{pct}%</span>
+                                <span className="text-xs text-[#6B7280] w-16 text-right shrink-0">{count} resp.</span>
                               </div>
                             );
                           })}
@@ -185,9 +248,7 @@ export default function AdminDashboard() {
               </h2>
               <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
                 {surveys.length === 0 ? (
-                  <p className="px-6 py-8 text-sm text-gray-400 text-center">
-                    No hay encuestas aún.
-                  </p>
+                  <p className="px-6 py-8 text-sm text-gray-400 text-center">No hay encuestas aún.</p>
                 ) : (
                   <table className="w-full text-sm">
                     <thead>
@@ -201,36 +262,19 @@ export default function AdminDashboard() {
                     </thead>
                     <tbody>
                       {surveys.map((survey, i) => (
-                        <tr
-                          key={survey.id}
-                          className={`border-b border-gray-100 last:border-0 ${
-                            i % 2 === 1 ? "bg-gray-50/50" : ""
-                          }`}
-                        >
+                        <tr key={survey.id} className={`border-b border-gray-100 last:border-0 ${i % 2 === 1 ? "bg-gray-50/50" : ""}`}>
                           <td className="px-6 py-4 text-[#1E2D3D] font-medium max-w-xs">
                             <span className="line-clamp-2">{survey.question}</span>
                           </td>
-                          <td className="px-4 py-4 text-center text-[#6B7280]">
-                            {survey.options.length}
-                          </td>
-                          <td className="px-4 py-4 text-center font-semibold text-[#1E2D3D]">
-                            {survey.responseCount}
-                          </td>
+                          <td className="px-4 py-4 text-center text-[#6B7280]">{survey.options.length}</td>
+                          <td className="px-4 py-4 text-center font-semibold text-[#1E2D3D]">{survey.responseCount}</td>
                           <td className="px-4 py-4 text-center">
-                            <span className={`inline-flex text-[10px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full ${
-                              survey.active
-                                ? "bg-[#2EBFC0]/10 text-[#2EBFC0]"
-                                : "bg-gray-100 text-gray-400"
-                            }`}>
+                            <span className={`inline-flex text-[10px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full ${survey.active ? "bg-[#2EBFC0]/10 text-[#2EBFC0]" : "bg-gray-100 text-gray-400"}`}>
                               {survey.active ? "Activa" : "Inactiva"}
                             </span>
                           </td>
                           <td className="px-4 py-4 text-center">
-                            <button
-                              onClick={() => handleDelete(survey.id, survey.question)}
-                              className="p-2 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                              title="Eliminar encuesta"
-                            >
+                            <button onClick={() => handleDeleteSurvey(survey.id, survey.question)} className="p-2 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors" title="Eliminar">
                               <MdDelete size={18} />
                             </button>
                           </td>
@@ -249,72 +293,137 @@ export default function AdminDashboard() {
               </h2>
               <div className="bg-white rounded-2xl border border-gray-200 p-6 flex flex-col gap-5">
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide">
-                    Pregunta
-                  </span>
-                  <input
-                    type="text"
-                    value={newQuestion}
-                    onChange={(e) => setNewQuestion(e.target.value)}
+                  <span className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide">Pregunta</span>
+                  <input type="text" value={newQuestion} onChange={(e) => setNewQuestion(e.target.value)}
                     placeholder="¿Cuál es tu pregunta para los ciudadanos?"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 text-[#1E2D3D] text-sm
-                               focus:outline-none focus:ring-2 focus:ring-[#2EBFC0] focus:border-transparent"
-                  />
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 text-[#1E2D3D] text-sm focus:outline-none focus:ring-2 focus:ring-[#2EBFC0] focus:border-transparent" />
                 </label>
-
                 <div className="flex flex-col gap-2">
-                  <span className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide">
-                    Opciones de respuesta
-                  </span>
+                  <span className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide">Opciones de respuesta</span>
                   {newOptions.map((opt, i) => (
                     <div key={i} className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={opt}
-                        onChange={(e) => {
-                          const updated = [...newOptions];
-                          updated[i] = e.target.value;
-                          setNewOptions(updated);
-                        }}
+                      <input type="text" value={opt} onChange={(e) => { const u = [...newOptions]; u[i] = e.target.value; setNewOptions(u); }}
                         placeholder={`Opción ${i + 1}`}
-                        className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-[#1E2D3D] text-sm
-                                   focus:outline-none focus:ring-2 focus:ring-[#2EBFC0] focus:border-transparent"
-                      />
+                        className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-[#1E2D3D] text-sm focus:outline-none focus:ring-2 focus:ring-[#2EBFC0] focus:border-transparent" />
                       {newOptions.length > 2 && (
-                        <button
-                          onClick={() =>
-                            setNewOptions(newOptions.filter((_, idx) => idx !== i))
-                          }
-                          className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                        >
+                        <button onClick={() => setNewOptions(newOptions.filter((_, idx) => idx !== i))} className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors">
                           <MdRemove size={16} />
                         </button>
                       )}
                     </div>
                   ))}
                   {newOptions.length < 6 && (
-                    <button
-                      onClick={() => setNewOptions([...newOptions, ""])}
-                      className="self-start flex items-center gap-1.5 text-xs font-semibold text-[#2EBFC0]
-                                 hover:text-[#27aaab] transition-colors mt-1"
-                    >
-                      <MdAdd size={16} />
-                      Agregar opción
+                    <button onClick={() => setNewOptions([...newOptions, ""])} className="self-start flex items-center gap-1.5 text-xs font-semibold text-[#2EBFC0] hover:text-[#27aaab] transition-colors mt-1">
+                      <MdAdd size={16} /> Agregar opción
                     </button>
                   )}
                 </div>
-
-                {saveError && (
-                  <p className="text-xs text-red-500 font-medium">{saveError}</p>
-                )}
-
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="self-start px-6 py-3 rounded-xl bg-[#2EBFC0] text-white font-semibold text-sm
-                             hover:bg-[#27aaab] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
+                {saveError && <p className="text-xs text-red-500 font-medium">{saveError}</p>}
+                <button onClick={handleSaveSurvey} disabled={saving}
+                  className="self-start px-6 py-3 rounded-xl bg-[#2EBFC0] text-white font-semibold text-sm hover:bg-[#27aaab] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                   {saving ? "Guardando…" : "Guardar encuesta"}
+                </button>
+              </div>
+            </section>
+
+            {/* ── INFORMES ─────────────────────────────── */}
+
+            {/* Informes list */}
+            <section>
+              <h2 className="text-sm font-bold tracking-[0.15em] uppercase text-[#6B7280] mb-4">
+                Informes publicados
+              </h2>
+              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                {informes.length === 0 ? (
+                  <p className="px-6 py-8 text-sm text-gray-400 text-center">No hay informes publicados aún.</p>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100 text-xs font-semibold text-[#6B7280] uppercase tracking-wide">
+                        <th className="px-6 py-3 text-left">Título</th>
+                        <th className="px-4 py-3 text-left">Categoría</th>
+                        <th className="px-4 py-3 text-center">Fecha</th>
+                        <th className="px-4 py-3" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {informes.map((inf, i) => (
+                        <tr key={inf.id} className={`border-b border-gray-100 last:border-0 ${i % 2 === 1 ? "bg-gray-50/50" : ""}`}>
+                          <td className="px-6 py-4 text-[#1E2D3D] font-medium max-w-xs">
+                            <span className="line-clamp-2">{inf.title}</span>
+                          </td>
+                          <td className="px-4 py-4 text-[#6B7280] text-xs font-semibold uppercase tracking-wide">{inf.category}</td>
+                          <td className="px-4 py-4 text-center text-[#6B7280] text-xs">{inf.published_date}</td>
+                          <td className="px-4 py-4 text-center">
+                            <button onClick={() => handleDeleteInforme(inf.id, inf.file_path, inf.title)} className="p-2 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors" title="Eliminar">
+                              <MdDelete size={18} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </section>
+
+            {/* Upload informe */}
+            <section>
+              <h2 className="text-sm font-bold tracking-[0.15em] uppercase text-[#6B7280] mb-4">
+                Publicar informe
+              </h2>
+              <div className="bg-white rounded-2xl border border-gray-200 p-6 flex flex-col gap-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FormField label="Título del informe">
+                    <input type="text" value={uploadTitle} onChange={(e) => setUploadTitle(e.target.value)}
+                      placeholder="Impacto del alza de combustibles…"
+                      className={inputCls} />
+                  </FormField>
+                  <FormField label="Categoría">
+                    <input type="text" value={uploadCategory} onChange={(e) => setUploadCategory(e.target.value)}
+                      placeholder="Economía, Salud, Educación…"
+                      className={inputCls} />
+                  </FormField>
+                  <FormField label="Fecha de publicación">
+                    <input type="text" value={uploadDate} onChange={(e) => setUploadDate(e.target.value)}
+                      placeholder="Mayo 2026"
+                      className={inputCls} />
+                  </FormField>
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField label="Páginas">
+                      <input type="number" min={1} value={uploadPages} onChange={(e) => setUploadPages(e.target.value)}
+                        placeholder="28"
+                        className={inputCls} />
+                    </FormField>
+                    <FormField label="Tamaño (PDF)">
+                      <input type="text" value={uploadFileSize} onChange={(e) => setUploadFileSize(e.target.value)}
+                        placeholder="2.4 MB"
+                        className={inputCls} />
+                    </FormField>
+                  </div>
+                </div>
+
+                <FormField label="Archivo PDF">
+                  <label className="flex items-center gap-3 px-4 py-3 rounded-xl border border-dashed border-gray-300 cursor-pointer hover:border-[#2EBFC0] hover:bg-[#2EBFC0]/5 transition-all">
+                    <MdUploadFile size={20} className="text-[#6B7280] shrink-0" />
+                    <span className="text-sm text-[#6B7280] truncate">
+                      {uploadFile ? uploadFile.name : "Seleccionar archivo PDF…"}
+                    </span>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf"
+                      className="hidden"
+                      onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+                    />
+                  </label>
+                </FormField>
+
+                {uploadError && <p className="text-xs text-red-500 font-medium">{uploadError}</p>}
+
+                <button onClick={handleUploadInforme} disabled={uploading}
+                  className="self-start px-6 py-3 rounded-xl bg-[#2EBFC0] text-white font-semibold text-sm hover:bg-[#27aaab] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                  {uploading ? "Subiendo…" : "Publicar informe"}
                 </button>
               </div>
             </section>
@@ -322,6 +431,18 @@ export default function AdminDashboard() {
         )}
       </main>
     </div>
+  );
+}
+
+const inputCls =
+  "w-full px-4 py-2.5 rounded-xl border border-gray-200 text-[#1E2D3D] text-sm focus:outline-none focus:ring-2 focus:ring-[#2EBFC0] focus:border-transparent";
+
+function FormField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide">{label}</span>
+      {children}
+    </label>
   );
 }
 
