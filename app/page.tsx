@@ -8,6 +8,7 @@ import Videos from "@/components/sections/Videos";
 import QuienesSomos from "@/components/sections/QuienesSomos";
 import Participar from "@/components/sections/Participar";
 import Contacto from "@/components/sections/Contacto";
+import Footer from "@/components/Footer";
 
 export default function Home() {
   return (
@@ -24,6 +25,7 @@ export default function Home() {
         <Participar />
         <Contacto />
       </main>
+      <Footer />
     </>
   );
 }
